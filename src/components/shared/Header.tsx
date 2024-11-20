@@ -27,7 +27,13 @@ import { Web3Auth } from "@web3auth/modal";
 import { CHAIN_NAMESPACES, IProvider, WEB3AUTH_NETWORK } from "@web3auth/base";
 import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider";
 // import {useMediaQuery} from ";
-import { createUser, getUserByEmail } from "@/utils/db/actions";
+import {
+  createUser,
+  getUserByEmail,
+  getUnreadNotifications,
+  getUserBalance,
+  markNotificationAsRead,
+} from "@/utils/db/actions";
 
 const clientId: string = process.env.WEB3_AUTH_CLIENT_ID as string;
 
@@ -52,6 +58,15 @@ const web3auth = new Web3Auth({
   privateKeyProvider,
 });
 
+type CustomNotification = {
+  id: number;
+  createdAt: Date;
+  userId: number;
+  message: string;
+  type: string;
+  isRead: boolean;
+};
+
 const Header = ({
   totalEarnings,
   onMenuClick,
@@ -64,7 +79,7 @@ const Header = ({
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<any>(null);
   const pathname = usePathname();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<CustomNotification[]>([]);
   //   const isMobile = useMediaQuery("(max-width: 768px)");
   const [balance, setBalance] = useState(0);
 
@@ -96,12 +111,120 @@ const Header = ({
       try {
         if (userInfo && userInfo.email) {
           const user = await getUserByEmail(userInfo.email);
+          if (user) {
+            const unreadNotifications = await getUnreadNotifications(user.id);
+            if (unreadNotifications.length > 0) {
+              setNotifications(unreadNotifications);
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching notifications:", error);
       }
     };
-  }, []);
+    fetchNotifications();
+    const notificationInterval = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
+    return () => clearInterval(notificationInterval);
+  }, [userInfo]);
+
+  useEffect(() => {
+    const fetchUserBalance = async () => {
+      try {
+        if (userInfo && userInfo.email) {
+          const user = await getUserByEmail(userInfo.email);
+          if (user) {
+            const balance = await getUserBalance(user.id);
+            setBalance(balance);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user balance:", error);
+      }
+    };
+    fetchUserBalance();
+    const handleBalanceUpdates = (event: CustomEvent) => {
+      setBalance(event.detail);
+    };
+    window.addEventListener(
+      "balanceUpdate",
+      handleBalanceUpdates as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "balanceUpdate",
+        handleBalanceUpdates as EventListener
+      );
+    };
+  }, [userInfo]);
+
+  const login = async () => {
+    if (!web3auth) {
+      console.error("Web3Auth not initialized");
+      return;
+    }
+    try {
+      const web3authProvider = await web3auth.connect();
+      setProvider(web3authProvider);
+      setLoggedIn(true);
+      const user = await web3auth.getUserInfo();
+      setUserInfo(user);
+      if (user.email) {
+        localStorage.setItem("userEmail", user.email);
+        try {
+          await createUser(user.email, user.name || "Anonymous User");
+        } catch (error) {
+          console.error("Error creating user:", error);
+        }
+      }
+    } catch (error) {
+      console.log("Error logging in:", error);
+    }
+  };
+
+  const logout = async () => {
+    if (!web3auth) {
+      console.error("Web3Auth not initialized");
+      return;
+    }
+    try {
+      await web3auth.logout();
+      setProvider(null);
+      setLoggedIn(false);
+      setUserInfo(null);
+      localStorage.removeItem("userEmail");
+    } catch (error) {
+      console.error("Error logging out:", error);
+    }
+  };
+
+  const getUserInfo = async () => {
+    if (web3auth.connected) {
+      const user = await web3auth.getUserInfo();
+      setUserInfo(user);
+      if (user.email) {
+        localStorage.setItem("userEmail", user.email);
+        try {
+          await createUser(user.email, user.name || "Anonymous User");
+        } catch (error) {
+          console.error("Error creating user:", error);
+        }
+      }
+    }
+  };
+
+  const handleNotificationClick = async (notification: number) => {
+    try {
+      await markNotificationAsRead(notification);
+      if (loading) {
+        return <div>Loading web3 auth.... </div>;
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50"></header>
   );
