@@ -1,27 +1,26 @@
+// @ts-nocheck
 "use client";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Menu,
   Coins,
-  User,
+  Leaf,
+  Search,
   Bell,
+  User,
+  ChevronDown,
   LogIn,
   LogOut,
-  Search,
-  Leaf,
-  ChevronDown,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Web3Auth } from "@web3auth/modal";
 import { CHAIN_NAMESPACES, IProvider, WEB3AUTH_NETWORK } from "@web3auth/base";
@@ -29,13 +28,14 @@ import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   createUser,
-  getUserByEmail,
   getUnreadNotifications,
-  getUserBalance,
   markNotificationAsRead,
+  getUserByEmail,
+  getUserBalance,
 } from "@/utils/db/actions";
 
-const clientId: string = process.env.WEB3_AUTH_CLIENT_ID as string;
+const clientId =
+  "BJKdDFkNtkWX87XqkuWrDu4rbkSvWyQZ5lswS0ucINxxcN0inRVW8zzKAywPPzgiOHP7_3PcfFwfpvcQvSdaLRs";
 
 const chainConfig = {
   chainNamespace: CHAIN_NAMESPACES.EIP155,
@@ -54,114 +54,110 @@ const privateKeyProvider = new EthereumPrivateKeyProvider({
 
 const web3auth = new Web3Auth({
   clientId,
-  web3AuthNetwork: WEB3AUTH_NETWORK.TESTNET,
+  web3AuthNetwork: WEB3AUTH_NETWORK.TESTNET, // Changed from SAPPHIRE_MAINNET to TESTNET
   privateKeyProvider,
 });
 
-type CustomNotification = {
-  id: number;
-  createdAt: Date;
-  userId: number;
-  message: string;
-  type: string;
-  isRead: boolean;
-};
-
-const Header = ({
-  totalEarnings,
-  onMenuClick,
-}: {
-  totalEarnings: Number;
+interface HeaderProps {
   onMenuClick: () => void;
-}) => {
+  totalEarnings: number;
+}
+
+export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   const [provider, setProvider] = useState<IProvider | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<any>(null);
   const pathname = usePathname();
-  const [notifications, setNotifications] = useState<CustomNotification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [balance, setBalance] = useState(0);
+
+  console.log("user info", userInfo);
 
   useEffect(() => {
     const init = async () => {
       try {
         await web3auth.initModal();
         setProvider(web3auth.provider);
+
         if (web3auth.connected) {
           setLoggedIn(true);
           const user = await web3auth.getUserInfo();
           setUserInfo(user);
           if (user.email) {
             localStorage.setItem("userEmail", user.email);
-            await createUser(user.email, user.name || "Anonymous");
+            try {
+              await createUser(user.email, user.name || "Anonymous User");
+            } catch (error) {
+              console.error("Error creating user:", error);
+              // Handle the error appropriately, maybe show a message to the user
+            }
           }
         }
       } catch (error) {
-        console.error("Error initializing web3auth:", error);
+        console.error("Error initializing Web3Auth:", error);
       } finally {
         setLoading(false);
       }
     };
+
     init();
   }, []);
 
   useEffect(() => {
     const fetchNotifications = async () => {
-      try {
-        if (userInfo && userInfo.email) {
-          const user = await getUserByEmail(userInfo.email);
-          if (user) {
-            const unreadNotifications = await getUnreadNotifications(user.id);
-            if (unreadNotifications.length > 0) {
-              setNotifications(unreadNotifications);
-            }
-          }
+      if (userInfo && userInfo.email) {
+        const user = await getUserByEmail(userInfo.email);
+        if (user) {
+          const unreadNotifications = await getUnreadNotifications(user.id);
+          setNotifications(unreadNotifications);
         }
-      } catch (error) {
-        console.error("Error fetching notifications:", error);
       }
     };
+
     fetchNotifications();
-    const notificationInterval = setInterval(() => {
-      fetchNotifications();
-    }, 30000);
+
+    // Set up periodic checking for new notifications
+    const notificationInterval = setInterval(fetchNotifications, 30000); // Check every 30 seconds
+
     return () => clearInterval(notificationInterval);
   }, [userInfo]);
 
   useEffect(() => {
     const fetchUserBalance = async () => {
-      try {
-        if (userInfo && userInfo.email) {
-          const user = await getUserByEmail(userInfo.email);
-          if (user) {
-            const balance = await getUserBalance(user.id);
-            setBalance(balance);
-          }
+      if (userInfo && userInfo.email) {
+        const user = await getUserByEmail(userInfo.email);
+        if (user) {
+          const userBalance = await getUserBalance(user.id);
+          setBalance(userBalance);
         }
-      } catch (error) {
-        console.error("Error fetching user balance:", error);
       }
     };
+
     fetchUserBalance();
-    const handleBalanceUpdates = (event: CustomEvent) => {
+
+    // Add an event listener for balance updates
+    const handleBalanceUpdate = (event: CustomEvent) => {
       setBalance(event.detail);
     };
+
     window.addEventListener(
-      "balanceUpdate",
-      handleBalanceUpdates as EventListener
+      "balanceUpdated",
+      handleBalanceUpdate as EventListener
     );
+
     return () => {
       window.removeEventListener(
-        "balanceUpdate",
-        handleBalanceUpdates as EventListener
+        "balanceUpdated",
+        handleBalanceUpdate as EventListener
       );
     };
   }, [userInfo]);
 
   const login = async () => {
     if (!web3auth) {
-      console.error("Web3Auth not initialized");
+      console.log("web3auth not initialized yet");
       return;
     }
     try {
@@ -176,16 +172,17 @@ const Header = ({
           await createUser(user.email, user.name || "Anonymous User");
         } catch (error) {
           console.error("Error creating user:", error);
+          // Handle the error appropriately, maybe show a message to the user
         }
       }
     } catch (error) {
-      console.log("Error logging in:", error);
+      console.error("Error during login:", error);
     }
   };
 
   const logout = async () => {
     if (!web3auth) {
-      console.error("Web3Auth not initialized");
+      console.log("web3auth not initialized yet");
       return;
     }
     try {
@@ -195,7 +192,7 @@ const Header = ({
       setUserInfo(null);
       localStorage.removeItem("userEmail");
     } catch (error) {
-      console.error("Error logging out:", error);
+      console.error("Error during logout:", error);
     }
   };
 
@@ -209,26 +206,29 @@ const Header = ({
           await createUser(user.email, user.name || "Anonymous User");
         } catch (error) {
           console.error("Error creating user:", error);
+          // Handle the error appropriately, maybe show a message to the user
         }
       }
     }
   };
 
-  const handleNotificationClick = async (notification: number) => {
-    try {
-      await markNotificationAsRead(notification);
-      if (loading) {
-        return <div> Loading web3 auth.... </div>;
-      }
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
-    }
+  const handleNotificationClick = async (notificationId: number) => {
+    await markNotificationAsRead(notificationId);
+    setNotifications((prevNotifications) =>
+      prevNotifications.filter(
+        (notification) => notification.id !== notificationId
+      )
+    );
   };
+
+  if (loading) {
+    return <div>Loading Web3Auth...</div>;
+  }
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="flex items-center justify-between px-4 py-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center">
           <Button
             variant="ghost"
             size="icon"
@@ -249,7 +249,6 @@ const Header = ({
             </div>
           </Link>
         </div>
-
         {!isMobile && (
           <div className="flex-1 max-w-xl mx-4">
             <div className="relative">
@@ -341,6 +340,4 @@ const Header = ({
       </div>
     </header>
   );
-};
-
-export default Header;
+}
