@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { getAllRewards, getUserByEmail } from "@/utils/db/actions";
 import { Loader, Award, User, Trophy, Crown } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { useUser } from "../context/userContext";
 
 type Reward = {
   id: number;
@@ -16,18 +17,36 @@ type Reward = {
 export default function LeaderboardPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<{
-    id: number;
-    email: string;
-    name: string;
-  } | null>(null);
+  const { user, setUser } = useUser();
+
+  // Aggregation logic to combine duplicate users
+  const aggregateRewards = (rewards: Reward[]) => {
+    const aggregated = rewards.reduce((acc, reward) => {
+      if (acc[reward.userId]) {
+        acc[reward.userId].points += reward.points;
+        acc[reward.userId].level = Math.max(
+          acc[reward.userId].level,
+          reward.level
+        ); // Keep the highest level
+      } else {
+        acc[reward.userId] = { ...reward };
+      }
+      return acc;
+    }, {} as Record<number, Reward>);
+
+    // Convert the aggregated object back into an array and sort by points (descending)
+    return Object.values(aggregated).sort((a, b) => b.points - a.points);
+  };
 
   useEffect(() => {
     const fetchRewardsAndUser = async () => {
       setLoading(true);
       try {
         const fetchedRewards = await getAllRewards();
-        setRewards(fetchedRewards);
+
+        // Aggregate rewards and set state
+        const aggregatedRewards = aggregateRewards(fetchedRewards);
+        setRewards(aggregatedRewards);
 
         const userEmail = localStorage.getItem("userEmail");
         if (userEmail) {
@@ -49,7 +68,7 @@ export default function LeaderboardPage() {
     };
 
     fetchRewardsAndUser();
-  }, []);
+  }, [setUser]);
 
   return (
     <div className="">
@@ -92,7 +111,7 @@ export default function LeaderboardPage() {
                 <tbody>
                   {rewards.map((reward, index) => (
                     <tr
-                      key={reward.id}
+                      key={reward.userId}
                       className={`${
                         user && user.id === reward.userId ? "bg-indigo-50" : ""
                       } hover:bg-gray-50 transition-colors duration-150 ease-in-out`}
