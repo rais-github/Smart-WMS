@@ -493,3 +493,17 @@ export async function getAllRewards() {
     return [];
   }
 }
+
+export async function updateUser(email: string, name: string, id: number) {
+  try {
+    const [updatedUser] = await db
+      .update(Users)
+      .set({ email, name })
+      .where(eq(Users.id, id))
+      .returning()
+      .execute();
+    return updatedUser;
+  } catch (error) {
+    console.error("Error updating user:", error);
+  }
+}

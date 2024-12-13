@@ -1,6 +1,6 @@
 // @ts-nocheck
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import {
   getUserByEmail,
   getUserBalance,
 } from "@/utils/db/actions";
-
+import { useUser } from "@/app/context/userContext";
 const clientId =
   "BJKdDFkNtkWX87XqkuWrDu4rbkSvWyQZ5lswS0ucINxxcN0inRVW8zzKAywPPzgiOHP7_3PcfFwfpvcQvSdaLRs";
 
@@ -68,12 +68,14 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<any>(null);
+  const [username, setUsername] = useState<string>("Anonymous User");
   const pathname = usePathname();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [balance, setBalance] = useState(0);
-
-  console.log("user info", userInfo);
+  const previousBalanceRef = useRef<number>(0);
+  const { user } = useUser();
+  // console.log("user info", userInfo);
 
   useEffect(() => {
     const init = async () => {
@@ -83,15 +85,31 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
 
         if (web3auth.connected) {
           setLoggedIn(true);
-          const user = await web3auth.getUserInfo();
-          setUserInfo(user);
-          if (user.email) {
-            localStorage.setItem("userEmail", user.email);
+          const web3User = await web3auth.getUserInfo();
+          setUserInfo(web3User);
+
+          if (web3User.email) {
+            localStorage.setItem("userEmail", web3User.email);
             try {
-              await createUser(user.email, user.name || "Anonymous User");
+              const dbUser = await getUserByEmail(web3User.email);
+              if (dbUser) {
+                setUsername(dbUser.name);
+                const userBalance = await getUserBalance(dbUser.id);
+                setBalance(userBalance);
+
+                const unreadNotifications = await getUnreadNotifications(
+                  dbUser.id
+                );
+                setNotifications(unreadNotifications);
+              } else {
+                await createUser(
+                  web3User.email,
+                  web3User.name || "Anonymous User"
+                );
+                setUsername(web3User.name || "Anonymous User");
+              }
             } catch (error) {
-              console.error("Error creating user:", error);
-              // Handle the error appropriately, maybe show a message to the user
+              console.error("Error fetching/creating user:", error);
             }
           }
         }
@@ -108,9 +126,9 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   useEffect(() => {
     const fetchNotifications = async () => {
       if (userInfo && userInfo.email) {
-        const user = await getUserByEmail(userInfo.email);
-        if (user) {
-          const unreadNotifications = await getUnreadNotifications(user.id);
+        const dbUser = await getUserByEmail(userInfo.email);
+        if (dbUser) {
+          const unreadNotifications = await getUnreadNotifications(dbUser.id);
           setNotifications(unreadNotifications);
         }
       }
@@ -118,8 +136,7 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
 
     fetchNotifications();
 
-    // Set up periodic checking for new notifications
-    const notificationInterval = setInterval(fetchNotifications, 30000); // Check every 30 seconds
+    const notificationInterval = setInterval(fetchNotifications, 30000);
 
     return () => clearInterval(notificationInterval);
   }, [userInfo]);
@@ -127,17 +144,19 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   useEffect(() => {
     const fetchUserBalance = async () => {
       if (userInfo && userInfo.email) {
-        const user = await getUserByEmail(userInfo.email);
-        if (user) {
-          const userBalance = await getUserBalance(user.id);
-          setBalance(userBalance);
+        const dbUser = await getUserByEmail(userInfo.email);
+        if (dbUser) {
+          const userBalance = await getUserBalance(dbUser.id);
+          if (userBalance !== previousBalanceRef.current) {
+            setBalance(userBalance);
+            previousBalanceRef.current = userBalance;
+          }
         }
       }
     };
 
     fetchUserBalance();
 
-    // Add an event listener for balance updates
     const handleBalanceUpdate = (event: CustomEvent) => {
       setBalance(event.detail);
     };
@@ -156,23 +175,22 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   }, [userInfo]);
 
   const login = async () => {
-    if (!web3auth) {
-      console.log("web3auth not initialized yet");
-      return;
-    }
     try {
       const web3authProvider = await web3auth.connect();
       setProvider(web3authProvider);
       setLoggedIn(true);
-      const user = await web3auth.getUserInfo();
-      setUserInfo(user);
-      if (user.email) {
-        localStorage.setItem("userEmail", user.email);
-        try {
-          await createUser(user.email, user.name || "Anonymous User");
-        } catch (error) {
-          console.error("Error creating user:", error);
-          // Handle the error appropriately, maybe show a message to the user
+      const web3User = await web3auth.getUserInfo();
+      setUserInfo(web3User);
+
+      if (web3User.email) {
+        localStorage.setItem("userEmail", web3User.email);
+        const dbUser = await getUserByEmail(web3User.email);
+        if (dbUser) {
+          setUsername(dbUser.name);
+          setBalance(await getUserBalance(dbUser.id));
+        } else {
+          await createUser(web3User.email, web3User.name || "Anonymous User");
+          setUsername(web3User.name || "Anonymous User");
         }
       }
     } catch (error) {
@@ -181,21 +199,19 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   };
 
   const logout = async () => {
-    if (!web3auth) {
-      console.log("web3auth not initialized yet");
-      return;
-    }
     try {
       await web3auth.logout();
       setProvider(null);
       setLoggedIn(false);
       setUserInfo(null);
+      setUsername("Anonymous User");
+      setNotifications([]);
+      setBalance(0);
       localStorage.removeItem("userEmail");
     } catch (error) {
       console.error("Error during logout:", error);
     }
   };
-
   const getUserInfo = async () => {
     if (web3auth.connected) {
       const user = await web3auth.getUserInfo();
@@ -325,9 +341,7 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={getUserInfo}>
-                  {userInfo ? userInfo.name : "Fetch User Info"}
-                </DropdownMenuItem>
+                <DropdownMenuItem>{username}</DropdownMenuItem>
                 <DropdownMenuItem>
                   <Link href="/settings">Profile</Link>
                 </DropdownMenuItem>

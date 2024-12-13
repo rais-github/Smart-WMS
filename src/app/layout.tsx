@@ -8,14 +8,16 @@ export const metadata: Metadata = {
 };
 
 import ClientLayout from "./ClientLayout";
-
+import { UserProvider } from "./context/userContext";
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>
-        <ClientLayout>{children}</ClientLayout>
+        <UserProvider>
+          <ClientLayout>{children}</ClientLayout>
+        </UserProvider>
       </body>
     </html>
   );
