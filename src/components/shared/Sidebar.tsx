@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { MapPin, Trash, Coins, Medal, Settings, Home, Car } from "lucide-react";
+import { MapPin, Trash, Coins, Medal, Settings, Home } from "lucide-react";
 
 const sidebarItems = [
   { href: "/", icon: Home, label: "Home" },
@@ -17,6 +18,45 @@ interface SidebarProps {
 
 export default function Sidebar({ open }: SidebarProps) {
   const pathname = usePathname();
+
+  // State to track the current quote and loading status
+  const [quote, setQuote] = useState<string>(
+    "🌱 Protect the planet; it's the only one we have."
+  );
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Function to fetch quotes from API
+  useEffect(() => {
+    const fetchQuote = async () => {
+      try {
+        const response = await fetch(
+          "https://api.api-ninjas.com/v1/quotes?category=environmental",
+          {
+            headers: {
+              "X-Api-Key": "/NODAV+xm0h5o21qRlIZmg==Qelvy5ZErfIO79Sg",
+            },
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data.length > 0) {
+            setQuote(`🌱 ${data[0].quote}`); // Add emoji to fetched quote
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch quote:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuote();
+
+    // Refresh the quote every 8 seconds
+    const interval = setInterval(fetchQuote, 8000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <aside
@@ -41,7 +81,19 @@ export default function Sidebar({ open }: SidebarProps) {
               </Button>
             </Link>
           ))}
+
+          {/* Quote Box */}
+          <div className="bg-green-100 text-green-800 p-4 rounded-lg shadow-md mt-8 border border-green-200 transition-transform hover:scale-105">
+            <p className="text-sm leading-relaxed italic text-center">
+              {loading ? (
+                <span>🌱 Loading inspiring quotes...</span>
+              ) : (
+                <span>{quote}</span>
+              )}
+            </p>
+          </div>
         </div>
+
         <div className="p-4 border-t border-gray-200">
           <Link href="/settings" passHref>
             <Button
