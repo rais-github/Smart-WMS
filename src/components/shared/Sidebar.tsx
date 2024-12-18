@@ -19,13 +19,11 @@ interface SidebarProps {
 export default function Sidebar({ open }: SidebarProps) {
   const pathname = usePathname();
 
-  // State to track the current quote and loading status
   const [quote, setQuote] = useState<string>(
-    "🌱 Protect the planet; it's the only one we have."
+    "🌱 Protect the planet; it's the only one we have.  🌿"
   );
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Function to fetch quotes from API
   useEffect(() => {
     const fetchQuote = async () => {
       try {
@@ -40,7 +38,7 @@ export default function Sidebar({ open }: SidebarProps) {
         if (response.ok) {
           const data = await response.json();
           if (data.length > 0) {
-            setQuote(`🌱 ${data[0].quote}`); // Add emoji to fetched quote
+            setQuote(`🌱 ${data[0].quote} 🌿`);
           }
         }
       } catch (error) {
