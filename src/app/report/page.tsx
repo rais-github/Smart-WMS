@@ -3,23 +3,27 @@ import { useState, useCallback, useEffect } from "react";
 import { MapPin, Upload, CheckCircle, Loader } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { StandaloneSearchBox, useJsApiLoader } from "@react-google-maps/api";
-import { Libraries } from "@react-google-maps/api";
 import {
   createUser,
   getUserByEmail,
   createReport,
   getRecentReports,
 } from "@/utils/db/actions";
+import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-
+import axios from "axios";
+import { isSameImage } from "@/utils/db/actions";
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-const libraries: Libraries = ["places"];
-
+const geolocationKey = process.env.GEOLOCATION_API_KEY as string;
 export default function ReportPage() {
+  const [location, setLocation] = useState("");
+  interface Suggestion {
+    display_name: string;
+  }
+
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [user, setUser] = useState<{
     id: number;
     email: string;
@@ -54,31 +58,42 @@ export default function ReportPage() {
     confidence: number;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const geocodingApiKey: string = "pk.836d258d80fd0e4247c0c849b982e8e3";
 
-  const [searchBox, setSearchBox] =
-    useState<google.maps.places.SearchBox | null>(null);
-
-  const { isLoaded } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: googleMapsApiKey!,
-    libraries: libraries,
-  });
-
-  const onLoad = useCallback((ref: google.maps.places.SearchBox) => {
-    setSearchBox(ref);
-  }, []);
-
-  const onPlacesChanged = () => {
-    if (searchBox) {
-      const places = searchBox.getPlaces();
-      if (places && places.length > 0) {
-        const place = places[0];
-        setNewReport((prev) => ({
-          ...prev,
-          location: place.formatted_address || "",
-        }));
-      }
+  const fetchSuggestions = useDebouncedCallback(async (input: any) => {
+    if (!input) {
+      setSuggestions([]);
+      return;
     }
+
+    const geoApiURL = `https://api.locationiq.com/v1/autocomplete?key=${geocodingApiKey}&q=${input}`;
+    axios
+      .get(geoApiURL)
+      .then((res) => {
+        console.log("Location Suggestions:", res.data);
+        setSuggestions(res.data);
+        setShowSuggestions(true);
+      })
+      .catch((err) => {
+        console.error("Error fetching location suggestions:", err);
+      });
+  }, 300);
+
+  const handleLocationChange = (e: { target: { value: any } }) => {
+    const inputValue = e.target.value;
+    setLocation(inputValue);
+    fetchSuggestions(inputValue);
+  };
+
+  // Handle suggestion click
+  interface Suggestion {
+    display_name: string;
+  }
+
+  const handleSuggestionClick = (suggestion: Suggestion) => {
+    setLocation(suggestion.display_name);
+    setShowSuggestions(false);
   };
 
   const handleInputChange = (
@@ -111,9 +126,7 @@ export default function ReportPage() {
 
   const handleVerify = async () => {
     if (!file) return;
-
     setVerificationStatus("verifying");
-
     try {
       const genAI = new GoogleGenerativeAI(geminiApiKey!);
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -139,8 +152,8 @@ export default function ReportPage() {
         "wasteType": "type of waste",
         "quantity": "estimated quantity with unit",
         "confidence": confidence level as a number between 0 and 1
-      }`;
-
+      };
+`;
       const result = await model.generateContent([prompt, ...imageParts]);
       const response = await result.response;
       const text = await response.text();
@@ -174,12 +187,29 @@ export default function ReportPage() {
       toast.error("Please verify the waste before submitting or log in.");
       return;
     }
+    // Check if the image has already been reported
+    let flagImage = false;
+    if (file) {
+      try {
+        flagImage = (await isSameImage(file, location)) as boolean;
+        console.log("[handleSubmit] flagImage:", flagImage);
+      } catch (error) {
+        console.error("[handleSubmit] Error during image check:", error);
+        toast.error("An error occurred while verifying the image.");
+        return;
+      }
+    }
 
+    if (flagImage === false) {
+      console.log("[handleSubmit] Image and location match.");
+      toast.error("This waste has already been reported in this location.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const report = (await createReport(
         user.id,
-        newReport.location,
+        location,
         newReport.type,
         newReport.amount,
         preview || undefined,
@@ -196,13 +226,14 @@ export default function ReportPage() {
 
       setReports([formattedReport, ...reports]);
       setNewReport({ location: "", type: "", amount: "" });
+      setLocation("");
       setFile(null);
       setPreview(null);
       setVerificationStatus("idle");
       setVerificationResult(null);
 
       toast.success(
-        `Report submitted successfully! You've earned points for reporting waste.`
+        "Report submitted successfully! You've earned points for reporting waste."
       );
     } catch (error) {
       console.error("Error submitting report:", error);
@@ -333,32 +364,44 @@ export default function ReportPage() {
               Location
             </label>
             {isLoaded ? (
-              <StandaloneSearchBox
-                onLoad={onLoad}
-                onPlacesChanged={onPlacesChanged}
-              >
+              <div>
                 <input
                   type="text"
                   id="location"
                   name="location"
-                  value={newReport.location}
-                  onChange={handleInputChange}
+                  value={location}
+                  onChange={handleLocationChange}
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300"
                   placeholder="Enter waste location"
                 />
-              </StandaloneSearchBox>
+              </div>
             ) : (
               <input
                 type="text"
                 id="location"
                 name="location"
-                value={newReport.location}
-                onChange={handleInputChange}
+                value={location}
+                onChange={handleLocationChange}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300"
                 placeholder="Enter waste location"
               />
+            )}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="relative mt-2">
+                <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                  {suggestions.map((suggestion, index) => (
+                    <li
+                      key={index}
+                      className="px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                      onClick={() => handleSuggestionClick(suggestion)}
+                    >
+                      {suggestion.display_name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
           <div>

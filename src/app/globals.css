@@ -6,6 +6,21 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #478d47fb;
+  border-radius: 10px;
+  border: 3px solid #f1f1f1;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

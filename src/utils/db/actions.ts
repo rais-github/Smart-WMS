@@ -8,6 +8,7 @@ import {
   CollectedWastes,
 } from "./schema";
 import { eq, sql, and, desc } from "drizzle-orm";
+import crypto from "crypto";
 
 export async function createUser(email: string, name: string) {
   try {
@@ -505,5 +506,55 @@ export async function updateUser(email: string, name: string, id: number) {
     return updatedUser;
   } catch (error) {
     console.error("Error updating user:", error);
+  }
+}
+
+export async function isSameImage(
+  file: File,
+  location: string
+): Promise<boolean | null> {
+  try {
+    const fileReader = new FileReader();
+
+    // Generate hash of the file content
+    const fileHash = await new Promise<string>((resolve, reject) => {
+      fileReader.onload = () => {
+        const hash = crypto
+          .createHash("sha256")
+          .update(fileReader.result as string)
+          .digest("hex");
+        resolve(hash);
+      };
+      fileReader.onerror = () => reject(fileReader.error);
+      fileReader.readAsDataURL(file);
+    });
+
+    console.log("[isSameImage] File hash generated:", fileHash);
+
+    // Retrieve potential matching records from the database
+    const potentialMatches = await db
+      .select()
+      .from(Reports)
+      .where(eq(Reports.location, location))
+      .execute();
+
+    for (const record of potentialMatches) {
+      // Hash the stored imageUrl from the database
+      const storedHash = crypto
+        .createHash("sha256")
+        .update(record.imageUrl || "")
+        .digest("hex");
+
+      if (storedHash === fileHash) {
+        console.log("[isSameImage] Match found for both image and location.");
+        return false; // Image and location match
+      }
+    }
+
+    console.log("[isSameImage] No match found for image or location.");
+    return true; // No match found
+  } catch (error) {
+    console.error("[isSameImage] Error during execution:", error);
+    return null; // Handle errors gracefully
   }
 }
