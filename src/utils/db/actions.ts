@@ -6,6 +6,7 @@ import {
   Rewards,
   Reports,
   CollectedWastes,
+  Coupons,
 } from "./schema";
 import { eq, sql, and, desc } from "drizzle-orm";
 import crypto from "crypto";
@@ -556,5 +557,86 @@ export async function isSameImage(
   } catch (error) {
     console.error("[isSameImage] Error during execution:", error);
     return null; // Handle errors gracefully
+  }
+}
+export async function getCoupons(userId: number) {
+  try {
+    const coupons = await db
+      .select()
+      .from(Coupons)
+      .where(eq(Coupons.userId, userId))
+      .execute();
+    return coupons;
+  } catch (error) {
+    console.error("Error fetching coupons:", error);
+    throw new Error("Failed to fetch coupons. Please try again.");
+  }
+}
+
+export async function createCoupon(
+  discount: number, // Ensure the discount is passed as an integer
+  expiry: Date,
+  userId: number
+) {
+  try {
+    // Ensure discount is an integer
+    const validDiscount = Math.floor(discount);
+
+    // Generate a unique coupon code
+    const couponCode = `COUPON-${Date.now()}-${Math.random()
+      .toString(30)
+      .substring(2, 9)}`;
+
+    // Save the coupon in the database
+    const [createdCoupon] = await db
+      .insert(Coupons)
+      .values({
+        code: couponCode,
+        discount: validDiscount,
+        expiry: expiry,
+        userId,
+      })
+      .returning()
+      .execute();
+
+    return createdCoupon;
+  } catch (error) {
+    console.error("Error creating coupon:", error);
+    throw new Error("Failed to create coupon. Please try again.");
+  }
+}
+
+export async function redeemAllPoints(userId: number) {
+  try {
+    // Retrieve user reward points
+    const userReward = await getOrCreateReward(userId);
+
+    if (!userReward || userReward.points <= 0) {
+      throw new Error("No points available to redeem.");
+    }
+
+    // Update the reward points to 0
+    const [updatedReward] = await db
+      .update(Rewards)
+      .set({
+        points: 0,
+        updatedAt: new Date(),
+      })
+      .where(eq(Rewards.userId, userId))
+      .returning()
+      .execute();
+
+    // Create a transaction for this redemption
+    await createTransaction(
+      userId,
+      "redeemed",
+      userReward.points,
+      `Redeemed all points: ${userReward.points}`
+    );
+
+    return updatedReward;
+  } catch (error) {
+    console.error("Error redeeming all points:", error);
+    throw error;
   }
 }

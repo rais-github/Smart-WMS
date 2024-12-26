@@ -85,3 +85,14 @@ export const Transactions = pgTable("transactions", {
   description: text("description").notNull(),
   date: timestamp("date").defaultNow().notNull(),
 });
+
+export const Coupons = pgTable("coupons", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).notNull().unique(), // Unique coupon code
+  discount: integer("discount").notNull(), // Discount percentage
+  expiry: timestamp("expiry").notNull(), // Expiry date of the coupon
+  userId: integer("user_id")
+    .references(() => Users.id) // Reference to Users table
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(), // Timestamp when coupon was created
+});
