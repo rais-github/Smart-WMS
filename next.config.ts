@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
       process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
     GEOLOCATION_API_KEY: process.env.GEOLOCATION_API_KEY,
+    REDIS_URL: process.env.REDIS_URL,
+    REDIS_SECRET: process.env.REDIS_SECRET,
   },
 };
 

@@ -1,4 +1,6 @@
 import { db } from "./dbConfig";
+import { redis } from "@/lib/redis";
+import { CachedReport } from "../../../types/redis";
 import {
   Users,
   Notifications,
@@ -10,6 +12,8 @@ import {
 } from "./schema";
 import { eq, sql, and, desc } from "drizzle-orm";
 import crypto from "crypto";
+
+const CACHE_KEY: string = "recentReports";
 
 export async function createUser(email: string, name: string) {
   try {
@@ -122,6 +126,85 @@ export async function getRecentReports(limit: number = 10) {
     return [];
   }
 }
+export async function getRecentReportsWithCache(limit: number = 10) {
+  try {
+    // Validate limit
+    limit = Math.max(1, Math.min(limit, 100));
+
+    // Try to fetch from cache
+    const cachedReports = (await redis.hgetall(CACHE_KEY)) as Record<
+      string,
+      string
+    >;
+    console.log("cached report format", cachedReports);
+
+    if (cachedReports && Object.keys(cachedReports).length > 0) {
+      console.log("Fetching recent reports from cache");
+      try {
+        const safeJSONParse = (value: any) => {
+          if (typeof value === "string") {
+            try {
+              return JSON.parse(value);
+            } catch (error) {
+              console.error("Invalid JSON skipped:", value, "Error:", error);
+              return null;
+            }
+          } else if (typeof value === "object" && value !== null) {
+            return value;
+          } else {
+            console.error("Unexpected value type skipped:", value);
+            return null;
+          }
+        };
+
+        const recentReports = Object.values(cachedReports)
+          .map((report) => safeJSONParse(report))
+          .filter((report): report is Record<string, any> => report !== null)
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+
+        console.log("Parsed recent reports:", recentReports);
+
+        return recentReports;
+      } catch (e) {
+        console.error("json parsing error", e);
+      }
+    }
+
+    // If cache is empty, fetch from database
+    const reports = await db
+      .select()
+      .from(Reports)
+      .orderBy(desc(Reports.createdAt))
+      .limit(limit)
+      .execute();
+
+    // Cache the result
+    if (reports.length > 0) {
+      const cacheData: Record<string, string> = {};
+      reports.forEach((report) => {
+        const formattedReport: CachedReport = {
+          id: report.id,
+          location: report.location,
+          wasteType: report.wasteType,
+          amount: report.amount,
+          createdAt: report.createdAt.toISOString(),
+        };
+        cacheData[report.id] = JSON.stringify(formattedReport);
+      });
+
+      console.log("Cache data to store:", cacheData);
+      await redis.hset(CACHE_KEY, cacheData);
+    }
+
+    return reports;
+  } catch (error) {
+    console.error("Error fetching recent reports:", error);
+    return [];
+  }
+}
 
 export async function createReport(
   userId: number,
@@ -146,6 +229,16 @@ export async function createReport(
       })
       .returning()
       .execute();
+
+    // Serialize and save to Redis
+    const cachedReport: CachedReport = {
+      id: report.id,
+      location: report.location,
+      wasteType: report.wasteType,
+      amount: report.amount,
+      createdAt: report.createdAt.toISOString(),
+    };
+    await redis.hset(CACHE_KEY, { [report.id]: JSON.stringify(cachedReport) });
 
     // Award 10 points for reporting waste
     const pointsEarned: number = 10;

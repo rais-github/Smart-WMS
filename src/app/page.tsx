@@ -63,7 +63,7 @@ export default function Home() {
           (total, reward) => total + (reward.points || 0),
           0
         );
-        const co2Offset = wasteCollected * 0.5; // Assuming 0.5 kg CO2 offset per kg of waste
+        const co2Offset = wasteCollected * 0.7; // Assuming 0.7 kg CO2 offset per kg of waste
 
         setImpactData({
           wasteCollected: Math.round(wasteCollected * 10) / 10, // Round to 1 decimal place

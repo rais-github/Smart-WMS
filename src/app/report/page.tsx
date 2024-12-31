@@ -7,13 +7,14 @@ import {
   createUser,
   getUserByEmail,
   createReport,
-  getRecentReports,
+  getRecentReportsWithCache,
 } from "@/utils/db/actions";
 import { useDebouncedCallback } from "use-debounce";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import { isSameImage } from "@/utils/db/actions";
+import { CachedReport } from "../../../types/redis";
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const geolocationKey = process.env.GEOLOCATION_API_KEY as string;
 export default function ReportPage() {
@@ -253,12 +254,14 @@ export default function ReportPage() {
         }
         setUser(user);
 
-        const recentReports = await getRecentReports();
+        const recentReports = await getRecentReportsWithCache();
+
         const formattedReports = recentReports.map((report) => ({
           ...report,
-          createdAt: report.createdAt.toISOString().split("T")[0],
+          createdAt: report.createdAt.toString().split("T")[0],
         }));
-        setReports(formattedReports);
+        console.log("[Report Page], formatted recent report", formattedReports);
+        setReports(formattedReports as CachedReport[]);
       } else {
         router.push("/login");
       }
