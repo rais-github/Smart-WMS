@@ -28,10 +28,11 @@ export default function Sidebar({ open }: SidebarProps) {
     const fetchQuote = async () => {
       try {
         const response = await fetch(
-          "https://api.api-ninjas.com/v1/quotes?category=environmental",
+          "https://api.api-ninjas.com/v1/quotes",
+          // "https://api.api-ninjas.com/v1/quotes?category=environmental",
           {
             headers: {
-              "X-Api-Key": "/NODAV+xm0h5o21qRlIZmg==Qelvy5ZErfIO79Sg",
+              "X-Api-Key": "lbg+72a8AyfDDU4aVkZY+Q==UUkd9zUJTp9o82JO",
             },
           }
         );
