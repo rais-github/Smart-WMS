@@ -20,7 +20,22 @@ import {
   getCoupons,
 } from "@/utils/db/actions";
 import { toast } from "react-hot-toast";
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
 
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
 type Transaction = {
   id: number;
   type: "earned_report" | "earned_collect" | "redeemed";
@@ -85,7 +100,7 @@ export default function RewardsPage() {
     const fetchUserDataAndRewards = async () => {
       setLoading(true);
       try {
-        const userEmail = localStorage.getItem("userEmail");
+        const userEmail = getItemWithExpiry("userEmail");
         if (userEmail) {
           const fetchedUser = await getUserByEmail(userEmail);
           if (fetchedUser) {

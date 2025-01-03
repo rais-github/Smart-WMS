@@ -17,6 +17,22 @@ import { isSameImage } from "@/utils/db/actions";
 import { CachedReport } from "../../../types/redis";
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const geolocationKey = process.env.GEOLOCATION_API_KEY as string;
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
+
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
 export default function ReportPage() {
   const [location, setLocation] = useState("");
   interface Suggestion {
@@ -246,7 +262,7 @@ export default function ReportPage() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const email = localStorage.getItem("userEmail");
+      const email = getItemWithExpiry("userEmail");
       if (email) {
         let user = await getUserByEmail(email);
         if (!user) {

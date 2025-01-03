@@ -4,10 +4,27 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/shared/Header";
 import Sidebar from "@/components/shared/Sidebar";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 import { getAvailableRewards, getUserByEmail } from "@/utils/db/actions";
 
 const inter = Inter({ subsets: ["latin"] });
+
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
+
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
 
 export default function ClientLayout({
   children,
@@ -20,7 +37,7 @@ export default function ClientLayout({
   useEffect(() => {
     const fetchTotalEarnings = async () => {
       try {
-        const userEmail = localStorage.getItem("userEmail");
+        const userEmail = getItemWithExpiry("userEmail");
         if (userEmail) {
           const user = await getUserByEmail(userEmail);
           if (user) {

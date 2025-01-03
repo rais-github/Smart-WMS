@@ -34,6 +34,7 @@ import {
   getUserBalance,
 } from "@/utils/db/actions";
 import { useUser } from "@/app/context/userContext";
+import toast from "react-hot-toast";
 const clientId =
   "BJKdDFkNtkWX87XqkuWrDu4rbkSvWyQZ5lswS0ucINxxcN0inRVW8zzKAywPPzgiOHP7_3PcfFwfpvcQvSdaLRs";
 
@@ -63,6 +64,36 @@ interface HeaderProps {
   totalEarnings: number;
 }
 
+const loginExpiryDays: Number = 6;
+
+function setItemWithExpiry(key: string, value, ttl: number) {
+  const now = new Date();
+  ttl = ttl * 24 * 60 * 60 * 1000;
+  const item = {
+    value: value,
+    expiry: now.getTime() + ttl,
+  };
+
+  localStorage.setItem(key, JSON.stringify(item));
+}
+
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
+
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
+
 export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   const [provider, setProvider] = useState<IProvider | null>(null);
   const [loggedIn, setLoggedIn] = useState(false);
@@ -75,7 +106,62 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
   const [balance, setBalance] = useState(0);
   const previousBalanceRef = useRef<number>(0);
   const { user } = useUser();
-  // console.log("user info", userInfo);
+  // console.log("user info", JSON.parse(localStorage.getItem("userEmail")));
+
+  const login = async () => {
+    try {
+      const web3authProvider = await web3auth.connect();
+      setProvider(web3authProvider);
+      setLoggedIn(true);
+      const web3User = await web3auth.getUserInfo();
+      setUserInfo(web3User);
+
+      if (web3User.email) {
+        setItemWithExpiry("userEmail", web3User.email, loginExpiryDays);
+        const dbUser = await getUserByEmail(web3User.email);
+        if (dbUser) {
+          setUsername(dbUser.name);
+          setBalance(await getUserBalance(dbUser.id));
+        } else {
+          await createUser(web3User.email, web3User.name || "Anonymous User");
+          setUsername(web3User.name || "Anonymous User");
+        }
+      }
+    } catch (error) {
+      console.error("Error during login:", error);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await web3auth.logout();
+      setProvider(null);
+      setLoggedIn(false);
+      setUserInfo(null);
+      setUsername("Anonymous User");
+      setNotifications([]);
+      setBalance(0);
+      localStorage.removeItem("userEmail");
+    } catch (error) {
+      console.error("Error during logout:", error);
+    }
+  };
+
+  const getUserInfo = async () => {
+    if (web3auth.connected) {
+      const user = await web3auth.getUserInfo();
+      setUserInfo(user);
+      if (user.email) {
+        setItemWithExpiry("userEmail", user.email, loginExpiryDays);
+        try {
+          await createUser(user.email, user.name || "Anonymous User");
+        } catch (error) {
+          console.error("Error creating user:", error);
+          // Handle the error appropriately, maybe show a message to the user
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -89,7 +175,7 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
           setUserInfo(web3User);
 
           if (web3User.email) {
-            localStorage.setItem("userEmail", web3User.email);
+            setItemWithExpiry("userEmail", web3User.email, loginExpiryDays);
             try {
               const dbUser = await getUserByEmail(web3User.email);
               if (dbUser) {
@@ -173,60 +259,6 @@ export default function Header({ onMenuClick, totalEarnings }: HeaderProps) {
       );
     };
   }, [userInfo]);
-
-  const login = async () => {
-    try {
-      const web3authProvider = await web3auth.connect();
-      setProvider(web3authProvider);
-      setLoggedIn(true);
-      const web3User = await web3auth.getUserInfo();
-      setUserInfo(web3User);
-
-      if (web3User.email) {
-        localStorage.setItem("userEmail", web3User.email);
-        const dbUser = await getUserByEmail(web3User.email);
-        if (dbUser) {
-          setUsername(dbUser.name);
-          setBalance(await getUserBalance(dbUser.id));
-        } else {
-          await createUser(web3User.email, web3User.name || "Anonymous User");
-          setUsername(web3User.name || "Anonymous User");
-        }
-      }
-    } catch (error) {
-      console.error("Error during login:", error);
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await web3auth.logout();
-      setProvider(null);
-      setLoggedIn(false);
-      setUserInfo(null);
-      setUsername("Anonymous User");
-      setNotifications([]);
-      setBalance(0);
-      localStorage.removeItem("userEmail");
-    } catch (error) {
-      console.error("Error during logout:", error);
-    }
-  };
-  const getUserInfo = async () => {
-    if (web3auth.connected) {
-      const user = await web3auth.getUserInfo();
-      setUserInfo(user);
-      if (user.email) {
-        localStorage.setItem("userEmail", user.email);
-        try {
-          await createUser(user.email, user.name || "Anonymous User");
-        } catch (error) {
-          console.error("Error creating user:", error);
-          // Handle the error appropriately, maybe show a message to the user
-        }
-      }
-    }
-  };
 
   const handleNotificationClick = async (notificationId: number) => {
     await markNotificationAsRead(notificationId);

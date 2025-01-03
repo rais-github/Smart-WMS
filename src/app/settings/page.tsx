@@ -5,13 +5,29 @@ import { User, Mail, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createUser, getUserByEmail, updateUser } from "@/utils/db/actions";
 import { useUser } from "../context/userContext";
+import toast from "react-hot-toast";
 
 type UserSettings = {
   name: string;
   email: string;
   notifications: boolean;
 };
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
 
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
 export default function SettingsPage() {
   const { user, setUser } = useUser();
   const [settings, setSettings] = useState<UserSettings>({
@@ -54,7 +70,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const fetchUser = async () => {
-      const email = localStorage.getItem("userEmail");
+      const email = getItemWithExpiry("userEmail");
       if (email) {
         try {
           let existingUser = await getUserByEmail(email);

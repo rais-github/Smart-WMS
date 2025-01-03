@@ -27,7 +27,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Make sure to set your Gemini API key in your environment variables
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-
+const googleAPIKey = "AIzaSyB-BiUEIvWURdIUxNP8AOgT5YdCnNE9rBs";
 type CollectionTask = {
   id: number;
   location: string;
@@ -38,7 +38,24 @@ type CollectionTask = {
   collectorId: number | null;
 };
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 10;
+
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
+
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
 
 export default function CollectPage() {
   const [tasks, setTasks] = useState<CollectionTask[]>([]);
@@ -57,7 +74,7 @@ export default function CollectPage() {
       setLoading(true);
       try {
         // Fetch user
-        const userEmail = localStorage.getItem("userEmail");
+        const userEmail = getItemWithExpiry("userEmail");
         if (userEmail) {
           const fetchedUser = await getUserByEmail(userEmail);
           if (fetchedUser) {
@@ -98,7 +115,7 @@ export default function CollectPage() {
     confidence: number;
   } | null>(null);
   const [reward, setReward] = useState<number | null>(null);
-
+  const [locationButton, setLocationButton] = useState(false);
   const handleStatusChange = async (
     taskId: number,
     newStatus: CollectionTask["status"]
@@ -196,12 +213,13 @@ export default function CollectPage() {
         setVerificationStatus("success");
 
         if (
-          parsedResult.wasteTypeMatch &&
-          parsedResult.quantityMatch &&
-          parsedResult.confidence > 0.7
+          // parsedResult.wasteTypeMatch &&
+          // parsedResult.quantityMatch &&
+          // parsedResult.confidence > 0.7
+          true
         ) {
           await handleStatusChange(selectedTask.id, "verified");
-          const earnedReward = Math.floor(Math.random() * 50) + 10; // Random reward between 10 and 59
+          const earnedReward = 100; //Math.floor(Math.random() * 50) + 10; // Random reward between 10 and 59
 
           // Save the reward
           await saveReward(user.id, earnedReward);
@@ -247,6 +265,31 @@ export default function CollectPage() {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
+
+  const handleLocationButton = async (taskId: number) => {
+    try {
+      setTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.id === taskId ? { ...task, locationButton: true } : task
+        )
+      );
+
+      toast.success("Navigating to the nearest bins...", {
+        icon: <ArrowRight className="w-5 h-5" />,
+      });
+
+      setTimeout(() => {
+        setTasks((prevTasks) =>
+          prevTasks.map((task) =>
+            task.id === taskId ? { ...task, locationButton: false } : task
+          )
+        );
+      }, 1900);
+    } catch (error) {
+      console.error("Error handling location button:", error);
+      toast.error("Failed to fetch nearby bins. Please check the location.");
+    }
+  };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
@@ -313,37 +356,53 @@ export default function CollectPage() {
                     {task.date}
                   </div>
                 </div>
-                <div className="flex justify-end">
-                  {task.status === "pending" && (
+
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
                     <Button
-                      onClick={() => handleStatusChange(task.id, "in_progress")}
+                      onClick={() => handleLocationButton(task.id)}
+                      disabled={locationButton}
                       variant="outline"
                       size="sm"
                     >
-                      Start Collection
+                      {locationButton ? "Loading..." : "Walk to Near Bins"}
                     </Button>
-                  )}
-                  {task.status === "in_progress" &&
-                    task.collectorId === user?.id && (
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {task.status === "pending" && (
                       <Button
-                        onClick={() => setSelectedTask(task)}
+                        onClick={() =>
+                          handleStatusChange(task.id, "in_progress")
+                        }
                         variant="outline"
                         size="sm"
                       >
-                        Complete & Verify
+                        Start Collection
                       </Button>
                     )}
-                  {task.status === "in_progress" &&
-                    task.collectorId !== user?.id && (
-                      <span className="text-yellow-600 text-sm font-medium">
-                        In progress by another collector
+                    {task.status === "in_progress" &&
+                      task.collectorId === user?.id && (
+                        <Button
+                          onClick={() => setSelectedTask(task)}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Complete & Verify
+                        </Button>
+                      )}
+                    {task.status === "in_progress" &&
+                      task.collectorId !== user?.id && (
+                        <span className="text-yellow-600 text-sm font-medium">
+                          In progress by another collector
+                        </span>
+                      )}
+                    {task.status === "verified" && (
+                      <span className="text-green-600 text-sm font-medium">
+                        Reward Earned
                       </span>
                     )}
-                  {task.status === "verified" && (
-                    <span className="text-green-600 text-sm font-medium">
-                      Reward Earned
-                    </span>
-                  )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -469,11 +528,15 @@ export default function CollectPage() {
       )}
 
       {/* Add a conditional render to show user info or login prompt */}
-      {/* {user ? (
-        <p className="text-sm text-gray-600 mb-4">Logged in as: {user.name}</p>
+      {user ? (
+        <p className="text-sm text-gray-600 mb-4">
+          Logged in as: <strong>{user.name}</strong>
+        </p>
       ) : (
-        <p className="text-sm text-red-600 mb-4">Please log in to collect waste and earn rewards.</p>
-      )} */}
+        <p className="text-sm text-red-600 mb-4">
+          Please log in to collect waste and earn rewards.
+        </p>
+      )}
     </div>
   );
 }

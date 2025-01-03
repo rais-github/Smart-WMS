@@ -13,7 +13,22 @@ type Reward = {
   createdAt: Date;
   userName: string | null;
 };
+function getItemWithExpiry(key: string): string | null {
+  const itemStr = localStorage.getItem(key);
 
+  if (!itemStr) return null;
+
+  const item = JSON.parse(itemStr);
+  const now = new Date();
+
+  if (now.getTime() > item.expiry) {
+    localStorage.removeItem(key);
+    toast.error("Session expired. Please login again. 😕");
+    return null;
+  }
+
+  return item.value;
+}
 export default function LeaderboardPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +63,7 @@ export default function LeaderboardPage() {
         const aggregatedRewards = aggregateRewards(fetchedRewards);
         setRewards(aggregatedRewards);
 
-        const userEmail = localStorage.getItem("userEmail");
+        const userEmail = getItemWithExpiry("userEmail");
         if (userEmail) {
           const fetchedUser = await getUserByEmail(userEmail);
           if (fetchedUser) {
