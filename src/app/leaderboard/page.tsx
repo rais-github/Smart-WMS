@@ -13,6 +13,7 @@ type Reward = {
   createdAt: Date;
   userName: string | null;
 };
+
 function getItemWithExpiry(key: string): string | null {
   const itemStr = localStorage.getItem(key);
 
@@ -29,6 +30,10 @@ function getItemWithExpiry(key: string): string | null {
 
   return item.value;
 }
+
+const MAX_LEVELS: number = 5;
+const levelUpAt: number = 250;
+
 export default function LeaderboardPage() {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,13 +44,16 @@ export default function LeaderboardPage() {
     const aggregated = rewards.reduce((acc, reward) => {
       if (acc[reward.userId]) {
         acc[reward.userId].points += reward.points;
-        acc[reward.userId].level = Math.max(
-          acc[reward.userId].level,
-          reward.level
-        ); // Keep the highest level
       } else {
         acc[reward.userId] = { ...reward };
       }
+
+      // Calculate level based on points
+      acc[reward.userId].level = Math.min(
+        MAX_LEVELS,
+        Math.floor(acc[reward.userId].points / levelUpAt) + 1
+      );
+
       return acc;
     }, {} as Record<number, Reward>);
 
