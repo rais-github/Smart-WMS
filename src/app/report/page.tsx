@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useCallback, useEffect } from "react";
 import { MapPin, Upload, CheckCircle, Loader } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ import { isSameImage } from "@/utils/db/actions";
 import { CachedReport } from "../../../types/redis";
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const geolocationKey = process.env.GEOLOCATION_API_KEY as string;
+const predictionModelApi: "http://localhost:8000/predict" =
+  "http://localhost:8000/predict";
 function getItemWithExpiry(key: string): string | null {
   const itemStr = localStorage.getItem(key);
 
@@ -76,6 +79,11 @@ export default function ReportPage() {
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [classificationResult, setClassificationResult] = useState<
+    string | null
+  >(null);
+  const [isClassifying, setIsClassifying] = useState(false);
+
   const geocodingApiKey: string = "pk.836d258d80fd0e4247c0c849b982e8e3";
 
   const fetchSuggestions = useDebouncedCallback(async (input: any) => {
@@ -120,18 +128,6 @@ export default function ReportPage() {
     setNewReport({ ...newReport, [name]: value });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      setFile(selectedFile);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(selectedFile);
-    }
-  };
-
   const readFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -149,7 +145,29 @@ export default function ReportPage() {
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       const base64Data = await readFileAsBase64(file);
+      const formData = new FormData();
+      formData.append("file", file);
+      console.log("File Type:", file.type);
+      console.log("File Size:", file.size);
 
+      try {
+        console.log("Sending image to server for prediction...");
+        const resp = await axios.post(predictionModelApi, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
+        const data = resp.data;
+        console.log("Prediction result:", data.predicted_class);
+        if (data.predicted_class === 1) {
+          console.log("Recyclable waste");
+        } else {
+          console.log("Organic waste");
+        }
+      } catch (error) {
+        console.error("Error predicting waste:", error);
+      }
       const imageParts = [
         {
           inlineData: {
@@ -284,6 +302,65 @@ export default function ReportPage() {
     };
     checkUser();
   }, [router]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
+  // const classifyImage = async (imageElement: HTMLImageElement) => {
+  //   console.log("Within classifyImage");
+  //   setIsClassifying(true);
+  //   try {
+  //     const classifier = await ml5.imageClassifier("MobileNet");
+  //     classifier.classify(imageElement, (error, results) => {
+  //       if (error) {
+  //         console.error("Error classifying image:", error);
+  //         toast.error("Error classifying image.");
+  //         return;
+  //       }
+
+  //       console.log("Classification Results:", results);
+  //       if (results && results.length > 0) {
+  //         setClassificationResult(results[0].label); // Use the top result
+  //         toast.success(`Waste type identified: ${results[0].label}`);
+  //       } else {
+  //         toast.error("Could not classify the waste. Try another image.");
+  //       }
+  //     });
+  //   } catch (error) {
+  //     console.error("Error initializing or running classifier:", error);
+  //     toast.error("Error classifying image.");
+  //   } finally {
+  //     setIsClassifying(false); // Cleanup state at the end
+  //   }
+  // };
+
+  // const handlesFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   if (e.target.files && e.target.files[0]) {
+  //     const selectedFile = e.target.files[0];
+  //     setFile(selectedFile);
+
+  //     const reader = new FileReader();
+  //     reader.onload = (e) => {
+  //       const imageURL = e.target?.result as string;
+  //       setPreview(imageURL);
+
+  //       // Create an image element for classification
+  //       const img = new Image();
+  //       img.src = imageURL;
+  //       img.onload = () => classifyImage(img);
+  //     };
+  //     reader.readAsDataURL(selectedFile);
+  //   }
+  // };
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
