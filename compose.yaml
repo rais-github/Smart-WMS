@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      DATABASE_URL: "postgresql://neondb_owner:vlIEc4doaOz6@ep-wandering-dawn-a6ytrun7.us-west-2.aws.neon.tech/neondb?sslmode=require"
+      WEB3_AUTH_CLIENT_ID: "BCGsCmigHaSPPHBCruJiJOkLugviAGMdT2_wlF9ypaO_U5N1aPUQEAcywwjnW26xUm1-wsPqYH_9cAJlIdJ67qM"
+      NEXT_PUBLIC_GEMINI_API_KEY: "AIzaSyA_hDr0phm8B8v1_sdn_uiws-l4rqaf-Yc"
+      GEOLOCATION_API_KEY: "836f4924-455b-49d8-97d8-e71c7e8bdb45"
+      REDIS_URL: "https://correct-oryx-45302.upstash.io"
+      REDIS_SECRET: "AbD2AAIjcDFkNjA0ZjJjNjZiOTQ0Njk3OWVjYmJiZTNhMjcwYWE1YXAxMA"
+
+    volumes:
+      - .:/app
+      - /app/node_modules
