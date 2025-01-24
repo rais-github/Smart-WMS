@@ -109,13 +109,16 @@ export default function CollectPage() {
   const [verificationStatus, setVerificationStatus] = useState<
     "idle" | "verifying" | "success" | "failure"
   >("idle");
+
   const [verificationResult, setVerificationResult] = useState<{
     wasteTypeMatch: boolean;
-    quantityMatch: boolean;
+    // quantityMatch: boolean;
     confidence: number;
   } | null>(null);
+
   const [reward, setReward] = useState<number | null>(null);
   const [locationButton, setLocationButton] = useState(false);
+
   const handleStatusChange = async (
     taskId: number,
     newStatus: CollectionTask["status"]
@@ -178,20 +181,20 @@ export default function CollectPage() {
         {
           inlineData: {
             data: base64Data,
-            mimeType: "image/jpej", // Adjust this if you know the exact type
+            mimeType: "image/jpeg",
           },
         },
       ];
 
       const prompt = `You are an expert in waste management and recycling. Analyze this image and provide:
         1. Confirm if the waste type matches: ${selectedTask.wasteType}
-        2. Estimate if the quantity matches: ${selectedTask.amount}
+      
         3. Your confidence level in this assessment (as a percentage)
         
         Respond in JSON format like this:
         {
           "wasteTypeMatch": true/false,
-          "quantityMatch": true/false,
+         
           "confidence": confidence level as a number between 0 and 1
         }`;
 
@@ -203,23 +206,22 @@ export default function CollectPage() {
         if (!match) {
           throw new Error("Failed to parse JSON response.");
         }
+        console.log("Parsed JSON response:", match[0]);
         const jsonString = match[0];
         const parsedResult = JSON.parse(jsonString);
         setVerificationResult({
           wasteTypeMatch: parsedResult.wasteTypeMatch,
-          quantityMatch: parsedResult.quantityMatch,
           confidence: parsedResult.confidence,
         });
         setVerificationStatus("success");
 
         if (
-          // parsedResult.wasteTypeMatch &&
-          // parsedResult.quantityMatch &&
-          // parsedResult.confidence > 0.7
-          true
+          parsedResult.wasteTypeMatch &&
+          true &&
+          parsedResult.confidence > 0.63
         ) {
           await handleStatusChange(selectedTask.id, "verified");
-          const earnedReward = 100; //Math.floor(Math.random() * 50) + 10; // Random reward between 10 and 59
+          const earnedReward = Math.floor(Math.random() * 50) + 10;
 
           // Save the reward
           await saveReward(user.id, earnedReward);
@@ -358,7 +360,7 @@ export default function CollectPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                  {/* <div className="flex flex-col sm:flex-row items-center gap-2">
                     <Button
                       onClick={() => handleLocationButton(task.id)}
                       disabled={locationButton}
@@ -367,7 +369,7 @@ export default function CollectPage() {
                     >
                       {locationButton ? "Loading..." : "Walk to Near Bins"}
                     </Button>
-                  </div>
+                  </div> */}
 
                   <div className="flex items-center gap-2">
                     {task.status === "pending" && (
@@ -501,10 +503,10 @@ export default function CollectPage() {
                   Waste Type Match:{" "}
                   {verificationResult.wasteTypeMatch ? "Yes" : "No"}
                 </p>
-                <p>
+                {/* <p>
                   Quantity Match:{" "}
                   {verificationResult.quantityMatch ? "Yes" : "No"}
-                </p>
+                </p> */}
                 <p>
                   Confidence: {(verificationResult.confidence * 100).toFixed(2)}
                   %
