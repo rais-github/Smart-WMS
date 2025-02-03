@@ -64,7 +64,7 @@ interface HeaderProps {
   totalEarnings: number;
 }
 
-const loginExpiryDays: Number = 6;
+const loginExpiryDays: number = 6;
 
 function setItemWithExpiry(key: string, value, ttl: number) {
   const now = new Date();

@@ -18,8 +18,7 @@ import { isSameImage } from "@/utils/db/actions";
 import { CachedReport } from "../../../types/redis";
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const geolocationKey = process.env.GEOLOCATION_API_KEY as string;
-const predictionModelApi: "http://localhost:8000/predict" =
-  "http://localhost:8000/predict";
+const predictionModelApi: string = "http://localhost:8000/predict";
 function getItemWithExpiry(key: string): string | null {
   const itemStr = localStorage.getItem(key);
 
