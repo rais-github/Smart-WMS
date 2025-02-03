@@ -125,7 +125,3 @@ To get a local copy of this project up and running, follow these steps:
    ```bash
    npm run dev
    ```
-5. **Pull Dockerise application**
-   ```bash
-   docker pull h1manshurai/smart-waste:latest
-   ```
